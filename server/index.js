@@ -5,6 +5,10 @@ import {
   RECIPES, capacity, listJobs, queuedBatches,
   settleProduction, enqueueJob, cancelJob, collectJobs
 } from './production.js'
+import {
+  COSTS as IRR_COSTS, RESERVOIR_CAP, networkInfo,
+  settleIrrigation, buildFacility, toggleFacility, demolishFacility
+} from './irrigation.js'
 
 const app = express()
 app.use(express.json())
@@ -62,19 +66,27 @@ ensureWeather(p0.season, p0.day, p0.abs_day)
 app.get('/api/state', (req, res) => {
   const p = q1('SELECT * FROM player WHERE id=1')
   const mill = q1('SELECT * FROM buildings WHERE id=2')
+  // 供水网络：连通且启用中的地块/水渠（前端绘制供水状态用）
+  const net = networkInfo()
   res.json({
     player: p,
     crops: q('SELECT * FROM crops'),
     inventory: q('SELECT * FROM inventory'),
     buildings: q('SELECT * FROM buildings'),
     animals: q('SELECT * FROM animals'),
-    plots: q('SELECT * FROM plots'),
+    plots: q('SELECT * FROM plots').map((pl) => ({ ...pl, irrigated: net.plotIds.has(pl.id) })),
     weather: currentWeather(),
     weatherLog: q('SELECT * FROM weather_log ORDER BY id DESC LIMIT 8'),
     recipes: RECIPES,
     queueCapacity: capacity(mill?.level || 1),
     queuedBatches: queuedBatches(p.abs_day),
-    productionJobs: listJobs(p.abs_day)
+    productionJobs: listJobs(p.abs_day),
+    irrigation: q('SELECT * FROM irrigation').map((f) => ({
+      ...f,
+      cap: f.kind === 'reservoir' ? RESERVOIR_CAP : null,
+      linked: f.kind === 'canal' ? net.canalIds.has(f.id) : !!f.active
+    })),
+    irrigationCosts: IRR_COSTS
   })
 })
 
@@ -299,6 +311,44 @@ app.post('/api/production/collect', (req, res) => {
   }
 })
 
+// ===== 灌溉系统 =====
+// 建造蓄水池/水渠：kind + 坐标，扣金币
+app.post('/api/irrigation/build', (req, res) => {
+  try {
+    const { kind, x, y } = req.body || {}
+    res.json(buildFacility(kind, Number(x), Number(y)))
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message })
+  }
+})
+
+// 停用/启用：停用即断流，启用后恢复供水
+app.post('/api/irrigation/toggle', (req, res) => {
+  try {
+    res.json(toggleFacility(Number(req.body?.id)))
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message })
+  }
+})
+
+// 拆除：返还部分造价，蓄水池余水作废
+app.post('/api/irrigation/demolish', (req, res) => {
+  try {
+    res.json(demolishFacility(Number(req.body?.id)))
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message })
+  }
+})
+
+// 设置地块灌溉优先级（0低 1中 2高）
+app.post('/api/irrigation/priority', (req, res) => {
+  const plotId = Number(req.body?.plotId)
+  const priority = Math.max(0, Math.min(2, Math.floor(Number(req.body?.priority) || 0)))
+  if (!q1('SELECT id FROM plots WHERE id=?', plotId)) return res.status(404).json({ error: 'not found' })
+  run('UPDATE plots SET irr_priority=? WHERE id=?', priority, plotId)
+  res.json({ ok: true, priority })
+})
+
 // 升级建筑
 app.post('/api/upgrade', (req, res) => {
   const { id } = req.body
@@ -333,7 +383,7 @@ function advanceDay() {
     const p = q1('SELECT * FROM player WHERE id=1')
     let { day, season } = p
     // —— 天气：结算当日事件（防护消耗/损失/恢复按天结算，幂等）——
-    const { mods, logs: wlogs } = settleWeather(p.abs_day)
+    const { mods, logs: wlogs, type: wType, severity: wSev } = settleWeather(p.abs_day)
     logs.push(...wlogs)
     day += 1
     // 更新所有地块：生长 + 四维变化 + 虫害 + 天气修正
@@ -372,6 +422,8 @@ function advanceDay() {
       health = Math.max(0, Math.min(100, health))
       run(`UPDATE animals SET feed=?,health=?,ready=1 WHERE id=?`, feed, health, a.id)
     }
+    // —— 灌溉：降雨补水/干旱耗水，蓄水池按连通关系与优先级分配有限水量 ——
+    logs.push(...settleIrrigation(wType, wSev))
     // 天数推进与季节轮转
     if (day > 28) {
       day = 1

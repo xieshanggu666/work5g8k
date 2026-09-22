@@ -27,6 +27,7 @@
       </div>
       <aside class="side">
         <PlotPanel />
+        <IrrigationPanel />
         <WeatherPanel />
       </aside>
     </main>
@@ -58,6 +59,7 @@ import { ref, onMounted } from 'vue'
 import { useGameStore } from '@/store/game'
 import FarmMap from '@/components/FarmMap.vue'
 import PlotPanel from '@/components/PlotPanel.vue'
+import IrrigationPanel from '@/components/IrrigationPanel.vue'
 import WeatherPanel from '@/components/WeatherPanel.vue'
 import Management from '@/components/Management.vue'
 const store = useGameStore()

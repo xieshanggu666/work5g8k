@@ -59,8 +59,9 @@ export function currentWeather() {
   return { ...ev, bad: !!def.bad, desc: def.desc, upkeepGold: up.gold, upkeepMat: up.mat }
 }
 
-// 结算当前天气事件的一天，返回 { mods, logs }
+// 结算当前天气事件的一天，返回 { mods, logs, type, severity }
 // mods 为对当日地块/动物常规更新的修正量；连续跳日时每日调用一次。
+// type/severity 供灌溉结算（降雨补水、干旱耗水）使用。
 // 幂等：同一事件同一天已写入 weather_log 则直接跳过，读档/重试不会重复扣损。
 export function settleWeather(absDay) {
   const mods = { waterAdd: 0, fertAdd: 0, lightAdd: 0, setWater: null, pestAdd: 0, growthBlock: false, stageRegressChance: 0, animalHpAdd: 0, animalRecover: 0, lightRecover: 0 }
@@ -70,10 +71,10 @@ export function settleWeather(absDay) {
     // 无事件：晴好恢复日
     mods.animalRecover = 8
     mods.lightRecover = 10
-    return { mods, logs }
+    return { mods, logs, type: 'sunny', severity: 0 }
   }
   if (q1('SELECT id FROM weather_log WHERE event_id=? AND abs_day=?', ev.id, absDay)) {
-    return { mods, logs }
+    return { mods, logs, type: ev.type, severity: ev.severity }
   }
 
   const def = TYPES[ev.type] || TYPES.sunny
@@ -82,7 +83,7 @@ export function settleWeather(absDay) {
     mods.animalRecover = 8
     mods.lightRecover = 10
     finishDay(ev, absDay, logs, `${def.icon} ${def.name}：风调雨顺，作物与动物状态恢复`)
-    return { mods, logs }
+    return { mods, logs, type: ev.type, severity: ev.severity }
   }
 
   // 恶劣天气：按天结算防护消耗（金币+物资），防护等级决定损失系数
@@ -114,7 +115,7 @@ export function settleWeather(absDay) {
   if (mods.animalHpAdd) parts.push(`动物健康${mods.animalHpAdd}`)
   finishDay(ev, absDay, logs,
     `${def.icon} ${def.name} 第${ev.settled_days + 1}/${ev.duration}天 · ${tierTxt}（防护消耗🪙${tier >= 1 ? up.gold : 0}+物资×${tier === 2 ? up.mat : 0}）：${parts.join('，') || '影响轻微'}`)
-  return { mods, logs }
+  return { mods, logs, type: ev.type, severity: ev.severity }
 }
 
 // 写入当日结算日志并推进事件进度；事件结束时返还剩余防护金币（物资已投入不退）

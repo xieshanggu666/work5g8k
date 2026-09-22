@@ -33,10 +33,14 @@ npm run dev
    可投入金币与「防灾物资」建立防护储备，恶劣天气逐日削减地块四维、阻止生长、降低动物健康，
    晴天则逐日恢复；连续跳日时按天结算防护消耗、损失与恢复，事件结束返还剩余防护金币，
    结算落库（每日唯一），读档或重试不会重复扣损
+8. **灌溉**：花金币建造蓄水池、沿空地铺设水渠连接地块；每日结算时蓄水池按连通关系
+   为相邻耕地供水，优先级 高→低（同级水分低者优先），水量有限耗尽即止；
+   降雨/暴雨为蓄水池补水，干旱/酷暑加速蒸发；设施可停用（断流）/启用（恢复）/拆除（返还半价），
+   地块可设灌溉优先级，干涸断流会在事件记录中预警
 
 ## 数据库表
 
-`player` `plots` `crops` `inventory` `buildings` `animals` `weather_events` `weather_log` `production_jobs`
+`player` `plots` `crops` `inventory` `buildings` `animals` `weather_events` `weather_log` `production_jobs` `irrigation`
 
 ## 后续可扩展
 

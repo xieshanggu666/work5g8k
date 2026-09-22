@@ -19,6 +19,17 @@
         <span>🐛 虫害</span><div class="bar"><i :style="{width: Math.min(100,p.pest*40)+'%',background:'#ef5350'}"></i></div><b>{{ p.pest>0?p.pest:'' }}</b>
       </div>
 
+      <!-- 灌溉：接通状态 + 供水优先级 -->
+      <div class="irr-row">
+        <span class="irr-state" :class="{on: p.irrigated}">{{ p.irrigated ? '💧 灌溉已接通' : '🚱 未接通水渠' }}</span>
+        <span class="irr-prio">
+          优先级
+          <button v-for="(l, i) in ['低','中','高']" :key="i"
+                  :class="{sel: (p.irr_priority ?? 1) === i}"
+                  @click="store.setIrrPriority(p.id, i)">{{ l }}</button>
+        </span>
+      </div>
+
       <div class="divider"></div>
 
       <!-- 空地：播种 -->
@@ -76,6 +87,15 @@ h3 { margin:0 0 10px;color:#fff;font-size:15px; }
 .bar { flex:1;height:8px;background:#0c1730;border-radius:4px;overflow:hidden; }
 .bar i { display:block;height:100%;border-radius:4px; }
 .divider { height:1px;background:rgba(120,160,220,0.15);margin:10px 0; }
+.irr-row { display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:8px;font-size:11px; }
+.irr-state { color:#8ba2c8; }
+.irr-state.on { color:#4fc3f7; }
+.irr-prio { display:flex;align-items:center;gap:3px;color:#6f84ab; }
+.irr-prio button {
+  background:#16263f;border:1px solid rgba(120,160,220,0.2);color:#8ba2c8;border-radius:5px;
+  padding:2px 7px;font-size:10px;cursor:pointer;
+}
+.irr-prio button.sel { background:#0277bd;color:#fff;border-color:#29b6f6; }
 
 .seed-crops { display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;max-height:180px;overflow-y:auto; }
 .seed-opt {

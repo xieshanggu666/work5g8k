@@ -24,6 +24,9 @@ export const useGameStore = defineStore('game', {
     productionJobs: [],
     queueCapacity: 0,
     queuedBatches: 0,
+    irrigation: [],
+    irrigationCosts: { reservoir: 60, canal: 8 },
+    irrBuildMode: null,      // 'reservoir' | 'canal' | null：地图放置模式
     selectedPlot: null,
     seedMode: false,
     selectedCropId: null,
@@ -52,6 +55,8 @@ export const useGameStore = defineStore('game', {
       this.productionJobs = d.productionJobs || []
       this.queueCapacity = d.queueCapacity || 0
       this.queuedBatches = d.queuedBatches || 0
+      this.irrigation = d.irrigation || []
+      this.irrigationCosts = d.irrigationCosts || this.irrigationCosts
       this.loaded = true
     },
     pushLog(msg, type = 'info') {
@@ -182,6 +187,41 @@ export const useGameStore = defineStore('game', {
         await api('/upgrade', 'POST', { id })
         await this.load()
         this.showToast('建筑升级成功', 'success')
+      } catch (e) { this.showToast(e.message, 'warn') }
+    },
+
+    // ===== 灌溉 =====
+    // 进入/退出放置模式（再次点击同类按钮取消）
+    setIrrBuildMode(kind) {
+      this.irrBuildMode = this.irrBuildMode === kind ? null : kind
+    },
+    async buildIrrigation(kind, x, y) {
+      try {
+        await api('/irrigation/build', 'POST', { kind, x, y })
+        await this.load()
+        this.showToast(kind === 'reservoir' ? '蓄水池已建成，铺设水渠连接地块吧' : '水渠已铺设', 'success')
+        // 蓄水池一次一座；水渠保持模式可连续铺设
+        if (kind === 'reservoir') this.irrBuildMode = null
+      } catch (e) { this.showToast(e.message, 'warn') }
+    },
+    async toggleIrrigation(id) {
+      try {
+        const r = await api('/irrigation/toggle', 'POST', { id })
+        await this.load()
+        this.showToast(r.active ? '已启用，恢复供水' : '已停用，供水网络断流', 'info')
+      } catch (e) { this.showToast(e.message, 'warn') }
+    },
+    async demolishIrrigation(id) {
+      try {
+        const r = await api('/irrigation/demolish', 'POST', { id })
+        await this.load()
+        this.showToast(`已拆除，返还 🪙${r.refund}`, 'info')
+      } catch (e) { this.showToast(e.message, 'warn') }
+    },
+    async setIrrPriority(plotId, priority) {
+      try {
+        await api('/irrigation/priority', 'POST', { plotId, priority })
+        await this.load()
       } catch (e) { this.showToast(e.message, 'warn') }
     },
 

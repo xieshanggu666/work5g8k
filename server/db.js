@@ -99,6 +99,18 @@ CREATE TABLE IF NOT EXISTS weather_log (
   UNIQUE(event_id, abs_day)
 );
 
+-- 灌溉设施：蓄水池(reservoir)储水，水渠(canal)连接蓄水池与地块；
+-- 停用(active=0)即断流，重新启用自动恢复供水；拆除直接删行
+CREATE TABLE IF NOT EXISTS irrigation (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL,                 -- reservoir/canal
+  x INTEGER NOT NULL,
+  y INTEGER NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1,
+  water INTEGER NOT NULL DEFAULT 0,   -- 蓄水池当前水量（水渠恒为 0）
+  UNIQUE(x, y)
+);
+
 -- 加工生产工单：批量排产，按游戏天串行推进；取消时记录取消绝对日用于退料与队列重排
 CREATE TABLE IF NOT EXISTS production_jobs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -125,4 +137,10 @@ CREATE TABLE IF NOT EXISTS production_jobs (
 const playerCols = db.prepare('PRAGMA table_info(player)').all().map((c) => c.name)
 if (!playerCols.includes('abs_day')) {
   db.exec('ALTER TABLE player ADD COLUMN abs_day INTEGER NOT NULL DEFAULT 1')
+}
+
+// 兼容旧存档：plots 增加灌溉优先级（0低 1中 2高，水量不足时高优先级先供水）
+const plotCols = db.prepare('PRAGMA table_info(plots)').all().map((c) => c.name)
+if (!plotCols.includes('irr_priority')) {
+  db.exec('ALTER TABLE plots ADD COLUMN irr_priority INTEGER NOT NULL DEFAULT 1')
 }
