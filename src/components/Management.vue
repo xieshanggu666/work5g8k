@@ -106,6 +106,73 @@
     </div>
   </div>
 
+  <!-- 灌溉 -->
+  <div v-if="tab==='irrigation'" class="page">
+    <div class="pcol card">
+      <h4>💧 灌溉系统</h4>
+      <div class="irr-sum" v-if="store.irrigation">
+        <span>🛢️ 蓄水池 <b>{{ store.irrigation.activeRes }}/{{ store.irrigation.reservoirs }}</b></span>
+        <span>💦 储水 <b>{{ store.irrigation.water }}/{{ store.irrigation.capacity }}</b></span>
+        <span>〰️ 水渠 <b>{{ store.irrigation.canals }}</b> 段</span>
+        <span>🌱 接入 <b>{{ store.irrigation.linkedPlots }}</b> 块</span>
+        <span v-if="store.irrigation.cutPlots" class="cut">🚱 断流 <b>{{ store.irrigation.cutPlots }}</b></span>
+      </div>
+      <div class="build-btns">
+        <button :class="{on: store.buildMode==='reservoir'}" @click="store.setBuildMode('reservoir')">
+          🛢️ 建蓄水池<span>🪙{{ store.irrCosts.reservoir?.gold ?? 150 }} · 容量{{ store.irrCosts.reservoir?.capacity ?? 300 }}</span>
+        </button>
+        <button :class="{on: store.buildMode==='canal'}" @click="store.setBuildMode('canal')">
+          〰️ 铺水渠<span>🪙{{ store.irrCosts.canal?.gold ?? 15 }} / 段</span>
+        </button>
+        <button :class="{on: store.buildMode==='demolish'}" @click="store.setBuildMode('demolish')">
+          ⛏️ 拆除设施<span>返还 50% 造价</span>
+        </button>
+      </div>
+      <p class="hint">
+        选中建设后到地图点击空地放置（可连续放置），再次点击按钮退出。
+        水渠把蓄水池的水引向四邻耕地；降雨补水、干旱蒸发，每日结算按地块优先级分配有限水量。
+        在「地块操作」面板为耕地接入灌溉并设置优先级。
+      </p>
+
+      <h4 class="sub-h">🛢️ 蓄水池</h4>
+      <div v-if="!store.reservoirs.length" class="none">还没有蓄水池，点击上方按钮建造</div>
+      <div class="row" v-for="r in store.reservoirs" :key="'r'+r.id">
+        <span class="i">🛢️</span>
+        <div class="m-info">
+          <b>蓄水池 ({{ r.x }},{{ r.y }})<span v-if="!r.active" class="tag lock">已停用</span></b>
+          <div class="wbar"><i :style="{width:(r.water/r.capacity*100)+'%'}"></i></div>
+          <span class="tag">💦 {{ Math.round(r.water) }}/{{ r.capacity }}</span>
+        </div>
+        <button class="mini" @click="store.toggleIrr('reservoir', r.id)">{{ r.active ? '停用' : '启用' }}</button>
+        <button class="mini red" @click="store.demolishIrr('reservoir', r.id)">拆除</button>
+      </div>
+    </div>
+
+    <div class="pcol card">
+      <h4>〰️ 水渠网络</h4>
+      <div v-if="!store.canals.length" class="none">还没有水渠</div>
+      <div class="canal-list" v-else>
+        <div class="row" v-for="c in store.canals" :key="'c'+c.id">
+          <span class="i">〰️</span>
+          <div class="m-info">
+            <b>水渠 ({{ c.x }},{{ c.y }})</b>
+            <span class="tag" :class="{flow: c.active && c.flowing, lock: !c.active}">
+              {{ !c.active ? '已停用' : c.flowing ? '通水中' : '断流' }}
+            </span>
+          </div>
+          <button class="mini" @click="store.toggleIrr('canal', c.id)">{{ c.active ? '停用' : '启用' }}</button>
+          <button class="mini red" @click="store.demolishIrr('canal', c.id)">拆除</button>
+        </div>
+      </div>
+
+      <h4 class="sub-h">📜 灌溉日志</h4>
+      <div v-if="!logLines.length" class="none">暂无记录</div>
+      <div class="irr-log" v-else>
+        <div class="wl-item" v-for="(m, i) in logLines" :key="i">{{ m }}</div>
+      </div>
+    </div>
+  </div>
+
   <!-- 畜棚 -->
   <div v-if="tab==='barn'" class="page">
     <div class="pcol card">
@@ -175,6 +242,7 @@ const healthColor = '#4caf50'
 const tabs = [
   { key: 'market', label: '🏪 市场' },
   { key: 'process', label: '⚙️ 加工坊' },
+  { key: 'irrigation', label: '💧 灌溉' },
   { key: 'barn', label: '🐖 畜棚' },
   { key: 'bag', label: '🎒 背包' },
   { key: 'build', label: '🏠 建筑' }
@@ -207,6 +275,11 @@ const matCount = computed(() =>
 )
 const mill = computed(() => store.buildings.find((b) => b.name === '加工坊'))
 const barn = computed(() => store.buildings.find((b) => b.name === '畜棚'))
+
+// 灌溉日志：按天倒序展开为多行
+const logLines = computed(() =>
+  store.irrigationLog.flatMap((l) => (l.msgs || []).map((m) => `第${l.abs_day}天 · ${m}`))
+)
 
 // ===== 生产队列 =====
 function stockOf(itemId) {
@@ -303,4 +376,22 @@ h4 { margin:0 0 8px;color:#fff;display:flex;gap:8px;align-items:center; }
 .job-bar i{display:block;height:100%;background:linear-gradient(90deg,#2962ff,#5c97ff);transition:width .3s;}
 .job.done .job-bar i{background:#43a047;}
 h4 .collect-all{margin-left:auto;font-size:11px;}
+/* 灌溉 */
+.irr-sum{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:#aebadd;margin-bottom:10px;}
+.irr-sum b{color:#a5d6a7;}
+.irr-sum .cut b{color:#ef9a9a;}
+.build-btns{display:flex;gap:8px;flex-wrap:wrap;}
+.build-btns button{flex:1;min-width:110px;background:#16263f;border:1px solid rgba(41,182,246,0.3);border-radius:9px;padding:10px 6px;color:#dbe4f3;cursor:pointer;font-size:12px;display:flex;flex-direction:column;align-items:center;gap:4px;}
+.build-btns button span{color:#ffc107;font-size:10px;}
+.build-btns button.on{background:#01579b;border-color:#29b6f6;box-shadow:0 0 0 1px #29b6f6;}
+.hint{color:#5b6f94;font-size:10px;line-height:1.6;margin:8px 0 0;}
+.sub-h{margin-top:14px;}
+.wbar{width:100%;height:6px;background:#0c1730;border-radius:3px;overflow:hidden;}
+.wbar i{display:block;height:100%;background:linear-gradient(90deg,#0277bd,#4fc3f7);}
+.mini.red{background:#c62828;}
+.tag.flow{color:#81d4fa;background:#0d3349;}
+.canal-list{max-height:220px;overflow-y:auto;}
+.irr-log{max-height:160px;overflow-y:auto;}
+.wl-item{font-size:11px;color:#8ba2c8;padding:3px 0;border-bottom:1px dashed rgba(120,160,220,0.1);}
+.wl-item:last-child{border-bottom:none;}
 </style>

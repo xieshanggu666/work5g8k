@@ -24,6 +24,12 @@ export const useGameStore = defineStore('game', {
     productionJobs: [],
     queueCapacity: 0,
     queuedBatches: 0,
+    reservoirs: [],
+    canals: [],
+    irrigation: null,
+    irrigationLog: [],
+    irrCosts: {},
+    buildMode: null,          // 灌溉建设模式：reservoir/canal/demolish
     selectedPlot: null,
     seedMode: false,
     selectedCropId: null,
@@ -52,6 +58,15 @@ export const useGameStore = defineStore('game', {
       this.productionJobs = d.productionJobs || []
       this.queueCapacity = d.queueCapacity || 0
       this.queuedBatches = d.queuedBatches || 0
+      this.reservoirs = d.reservoirs || []
+      this.canals = d.canals || []
+      this.irrigation = d.irrigation || null
+      this.irrigationLog = d.irrigationLog || []
+      this.irrCosts = d.irrCosts || {}
+      // 刷新选中地块引用（plots 数组已整体替换）
+      if (this.selectedPlot) {
+        this.selectedPlot = this.plots.find((p) => p.id === this.selectedPlot.id) || null
+      }
       this.loaded = true
     },
     pushLog(msg, type = 'info') {
@@ -182,6 +197,37 @@ export const useGameStore = defineStore('game', {
         await api('/upgrade', 'POST', { id })
         await this.load()
         this.showToast('建筑升级成功', 'success')
+      } catch (e) { this.showToast(e.message, 'warn') }
+    },
+
+    // ===== 灌溉 =====
+    setBuildMode(m) { this.buildMode = this.buildMode === m ? null : m },
+    async buildIrr(kind, x, y) {
+      try {
+        await api('/irrigation/build', 'POST', { kind, x, y })
+        await this.load()
+      } catch (e) { this.showToast(e.message, 'warn') }
+    },
+    async toggleIrr(kind, id) {
+      try {
+        const r = await api('/irrigation/toggle', 'POST', { kind, id })
+        await this.load()
+        this.showToast(r.active ? '已恢复启用' : '已停用（不再输水）', 'info')
+      } catch (e) { this.showToast(e.message, 'warn') }
+    },
+    async demolishIrr(kind, id) {
+      try {
+        const r = await api('/irrigation/demolish', 'POST', { kind, id })
+        await this.load()
+        this.showToast(`已拆除，返还 🪙${r.refund}`, 'info')
+      } catch (e) { this.showToast(e.message, 'warn') }
+    },
+    async setPlotIrr(irrigated, priority = 1) {
+      if (!this.selectedPlot) return
+      try {
+        await api('/irrigation/plot', 'POST', { plotId: this.selectedPlot.id, irrigated, priority })
+        await this.load()
+        this.showToast(irrigated ? '已接入灌溉网络' : '已断开灌溉', 'success')
       } catch (e) { this.showToast(e.message, 'warn') }
     },
 

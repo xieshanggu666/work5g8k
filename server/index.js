@@ -5,6 +5,10 @@ import {
   RECIPES, capacity, listJobs, queuedBatches,
   settleProduction, enqueueJob, cancelJob, collectJobs
 } from './production.js'
+import {
+  COSTS as IRR_COSTS, buildNode, toggleNode, demolishNode,
+  setPlotIrrigation, settleIrrigation, irrigationView, irrigationSummary
+} from './irrigation.js'
 
 const app = express()
 app.use(express.json())
@@ -62,6 +66,7 @@ ensureWeather(p0.season, p0.day, p0.abs_day)
 app.get('/api/state', (req, res) => {
   const p = q1('SELECT * FROM player WHERE id=1')
   const mill = q1('SELECT * FROM buildings WHERE id=2')
+  const irr = irrigationView()
   res.json({
     player: p,
     crops: q('SELECT * FROM crops'),
@@ -74,7 +79,13 @@ app.get('/api/state', (req, res) => {
     recipes: RECIPES,
     queueCapacity: capacity(mill?.level || 1),
     queuedBatches: queuedBatches(p.abs_day),
-    productionJobs: listJobs(p.abs_day)
+    productionJobs: listJobs(p.abs_day),
+    reservoirs: irr.reservoirs,
+    canals: irr.canals,
+    irrigation: irrigationSummary(),
+    irrigationLog: q('SELECT * FROM irrigation_log ORDER BY id DESC LIMIT 8')
+      .map((l) => ({ ...l, msgs: JSON.parse(l.msg || '[]') })),
+    irrCosts: IRR_COSTS
   })
 })
 
@@ -139,6 +150,39 @@ app.post('/api/harvest', (req, res) => {
 app.post('/api/nextday', (req, res) => {
   const logs = advanceDay()
   res.json({ ok: true, logs })
+})
+
+// ===== 灌溉系统 =====
+// 建造蓄水池/水渠：{ kind: 'reservoir'|'canal', x, y }
+app.post('/api/irrigation/build', (req, res) => {
+  try {
+    const { kind, x, y } = req.body || {}
+    res.json(buildNode(kind, Number(x), Number(y)))
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }) }
+})
+
+// 停用/启用：{ kind, id }（停用即断流，恢复启用后次日结算自动复水）
+app.post('/api/irrigation/toggle', (req, res) => {
+  try {
+    const { kind, id } = req.body || {}
+    res.json(toggleNode(kind, Number(id)))
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }) }
+})
+
+// 拆除：{ kind, id }，返还部分金币，蓄水池余水作废
+app.post('/api/irrigation/demolish', (req, res) => {
+  try {
+    const { kind, id } = req.body || {}
+    res.json(demolishNode(kind, Number(id)))
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }) }
+})
+
+// 地块接入/断开灌溉：{ plotId, irrigated, priority }（priority 0低 1中 2高）
+app.post('/api/irrigation/plot', (req, res) => {
+  try {
+    const { plotId, irrigated, priority } = req.body || {}
+    res.json(setPlotIrrigation(Number(plotId), irrigated ? 1 : 0, Number(priority ?? 1)))
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }) }
 })
 
 // 时间推进为主（快速）：连续跳日逐天结算天气防护消耗、损失与恢复
@@ -363,6 +407,8 @@ function advanceDay() {
       if (stage > 0 && mods.stageRegressChance > 0 && Math.random() < mods.stageRegressChance) stage -= 1
       run(`UPDATE plots SET water=?,fert=?,light=?,pest=?,stage=? WHERE id=?`, water, fert, light, pest, stage, pl.id)
     }
+    // —— 灌溉：降雨补水/干旱蒸发，按连通网络与优先级分配水量（在地块消耗之后补水）——
+    logs.push(...settleIrrigation(p.abs_day))
     // 动物喂食衰减 + 天气伤害/恢复 + 产物就绪
     const animals = q('SELECT * FROM animals')
     for (const a of animals) {

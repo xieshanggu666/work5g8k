@@ -21,6 +21,29 @@
 
       <div class="divider"></div>
 
+      <!-- 灌溉接入 -->
+      <div class="irr-box" :class="{cut: p.irrigated && !p.irr_ok}">
+        <template v-if="p.irrigated">
+          <div class="irr-line">
+            <span>💧 已接入灌溉</span>
+            <span class="irr-state" :class="{bad: !p.irr_ok}">{{ p.irr_ok ? '供水正常' : '🚱 断流' }}</span>
+          </div>
+          <div class="irr-ctl">
+            <span class="irr-label">优先级</span>
+            <button v-for="(lb, i) in ['低','中','高']" :key="i"
+                    class="prio" :class="{on: p.irr_priority === i}"
+                    @click="store.setPlotIrr(1, i)">{{ lb }}</button>
+            <button class="irr-off" @click="store.setPlotIrr(0, p.irr_priority)">断开</button>
+          </div>
+        </template>
+        <template v-else>
+          <button class="irr-join" @click="store.setPlotIrr(1, 1)">💧 接入灌溉网络</button>
+          <p class="irr-hint">需地块四邻有启用中的水渠/蓄水池；每日结算按优先级分配有限水量</p>
+        </template>
+      </div>
+
+      <div class="divider"></div>
+
       <!-- 空地：播种 -->
       <template v-if="!p.crop_id">
         <div class="seed-crops">
@@ -102,4 +125,19 @@ h3 { margin:0 0 10px;color:#fff;font-size:15px; }
 .crop-sprite { font-size:22px; }
 .stage { margin-left:auto;color:#8ba2c8;font-size:11px; }
 .stage.full { color:#ffd54f;font-weight:700; }
+
+/* 灌溉接入 */
+.irr-box { background:#0d2136;border:1px solid rgba(41,182,246,0.25);border-radius:9px;padding:8px 10px; }
+.irr-box.cut { border-color:rgba(239,83,80,0.5); }
+.irr-line { display:flex;align-items:center;justify-content:space-between;color:#b3e5fc;font-size:12px; }
+.irr-state { font-size:10px;color:#81d4fa;background:#123a52;padding:2px 7px;border-radius:4px; }
+.irr-state.bad { color:#ef9a9a;background:#3a1f1f; }
+.irr-ctl { display:flex;align-items:center;gap:5px;margin-top:7px; }
+.irr-label { color:#6f84ab;font-size:11px; }
+.prio { background:#16263f;border:1px solid rgba(120,160,220,0.2);color:#8ba2c8;border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer; }
+.prio.on { background:#0277bd;color:#fff;border-color:#29b6f6; }
+.irr-off { margin-left:auto;background:none;border:1px solid rgba(239,83,80,0.4);color:#ef9a9a;border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer; }
+.irr-join { width:100%;background:#0277bd;border:none;color:#fff;border-radius:8px;padding:8px;font-size:12px;cursor:pointer;font-weight:600; }
+.irr-join:hover { filter:brightness(1.15); }
+.irr-hint { color:#5b6f94;font-size:10px;margin:6px 0 0;line-height:1.5; }
 </style>

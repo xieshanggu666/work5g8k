@@ -99,6 +99,35 @@ CREATE TABLE IF NOT EXISTS weather_log (
   UNIQUE(event_id, abs_day)
 );
 
+-- 灌溉：蓄水池（储水，可停用；拆除余水作废）
+CREATE TABLE IF NOT EXISTS reservoirs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  x INTEGER NOT NULL,
+  y INTEGER NOT NULL,
+  capacity INTEGER NOT NULL DEFAULT 300,
+  water INTEGER NOT NULL DEFAULT 150,
+  active INTEGER NOT NULL DEFAULT 1,   -- 1 启用 0 停用（停用不补水/不蒸发/不供水）
+  built_abs INTEGER NOT NULL DEFAULT 1,
+  UNIQUE(x, y)
+);
+
+-- 灌溉：水渠段（连通蓄水池与地块四邻；停用即断流）
+CREATE TABLE IF NOT EXISTS canals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  x INTEGER NOT NULL,
+  y INTEGER NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1,
+  built_abs INTEGER NOT NULL DEFAULT 1,
+  UNIQUE(x, y)
+);
+
+-- 灌溉逐日结算日志：UNIQUE(abs_day) 保证同一天只结算一次（幂等）
+CREATE TABLE IF NOT EXISTS irrigation_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  abs_day INTEGER NOT NULL UNIQUE,
+  msg TEXT NOT NULL                    -- JSON 数组：当日补水/蒸发/分配/断流恢复明细
+);
+
 -- 加工生产工单：批量排产，按游戏天串行推进；取消时记录取消绝对日用于退料与队列重排
 CREATE TABLE IF NOT EXISTS production_jobs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -125,4 +154,16 @@ CREATE TABLE IF NOT EXISTS production_jobs (
 const playerCols = db.prepare('PRAGMA table_info(player)').all().map((c) => c.name)
 if (!playerCols.includes('abs_day')) {
   db.exec('ALTER TABLE player ADD COLUMN abs_day INTEGER NOT NULL DEFAULT 1')
+}
+
+// 兼容旧存档：plots 增加灌溉字段（接入标记 / 优先级 0低1中2高 / 上次结算供水状态）
+const plotCols = db.prepare('PRAGMA table_info(plots)').all().map((c) => c.name)
+if (!plotCols.includes('irrigated')) {
+  db.exec('ALTER TABLE plots ADD COLUMN irrigated INTEGER NOT NULL DEFAULT 0')
+}
+if (!plotCols.includes('irr_priority')) {
+  db.exec('ALTER TABLE plots ADD COLUMN irr_priority INTEGER NOT NULL DEFAULT 1')
+}
+if (!plotCols.includes('irr_ok')) {
+  db.exec('ALTER TABLE plots ADD COLUMN irr_ok INTEGER NOT NULL DEFAULT 1')  // 1 供水正常 0 断流
 }
